@@ -1,0 +1,483 @@
+from urllib.parse import urlparse
+import ipaddress
+import re
+import tkinter as tk
+from tkinter import messagebox
+
+
+# ====================================
+# SECURITY CHECK FUNCTIONS
+# ====================================
+
+def parse_url(url):
+    return urlparse(url)
+
+
+def check_ip_address(domain):
+    try:
+        ipaddress.ip_address(domain)
+        return True
+    except ValueError:
+        return False
+
+
+def check_https(parsed_url):
+    return parsed_url.scheme.lower() == "https"
+
+
+def check_suspicious_keywords(url):
+    suspicious_keywords = [
+        "verify",
+        "login",
+        "secure",
+        "update",
+        "password",
+        "account",
+        "signin",
+        "confirm"
+    ]
+
+    found_keywords = []
+
+    for keyword in suspicious_keywords:
+        if keyword in url.lower():
+            found_keywords.append(keyword)
+
+    return found_keywords
+
+
+def check_url_length(url):
+    return len(url) > 100
+
+
+def check_at_symbol(url):
+    return "@" in url
+
+
+def check_domain_structure(domain):
+    parts = domain.split(".")
+    return len(parts) > 4
+
+
+# ====================================
+# URL ANALYSIS
+# ====================================
+
+def analyze_url(entered_url):
+
+    parsed_url = parse_url(entered_url)
+    domain = parsed_url.hostname or ""
+
+    is_ip = check_ip_address(domain)
+    is_https = check_https(parsed_url)
+    found_keywords = check_suspicious_keywords(entered_url)
+    is_long = check_url_length(entered_url)
+    has_at = check_at_symbol(entered_url)
+    complex_domain = check_domain_structure(domain)
+
+    risk_score = 0
+    reasons = []
+
+    # IP Address
+    if is_ip:
+        risk_score += 3
+        reasons.append("Domain is an IP address")
+
+    # HTTPS
+    if not is_https:
+        risk_score += 2
+        reasons.append("HTTPS is not enabled")
+
+    # Suspicious Keywords
+    if found_keywords:
+        risk_score += len(found_keywords)
+        reasons.append(
+            "Suspicious keywords: "
+            + ", ".join(found_keywords)
+        )
+
+    # URL Length
+    if is_long:
+        risk_score += 2
+        reasons.append("URL is unusually long")
+
+    # @ Symbol
+    if has_at:
+        risk_score += 3
+        reasons.append("URL contains '@' character")
+
+    # Domain Structure
+    if complex_domain:
+        risk_score += 2
+        reasons.append("Domain has many parts")
+
+    # Risk Level
+    if risk_score <= 2:
+        risk_level = "LOW"
+    elif risk_score <= 5:
+        risk_level = "MEDIUM"
+    else:
+        risk_level = "HIGH"
+
+    return {
+        "domain": domain,
+        "scheme": parsed_url.scheme.upper(),
+        "path": parsed_url.path or "/",
+        "is_ip": is_ip,
+        "is_https": is_https,
+        "keywords": found_keywords,
+        "url_length": len(entered_url),
+        "has_at": has_at,
+        "complex_domain": complex_domain,
+        "risk_score": risk_score,
+        "risk_level": risk_level,
+        "reasons": reasons
+    }
+
+
+# ====================================
+# GUI
+# ====================================
+
+root = tk.Tk()
+root.title("Phishing URL Detector")
+root.geometry("700x650")
+root.resizable(False, False)
+
+
+# Title
+tk.Label(
+    root,
+    text="PHISHING URL DETECTOR",
+    font=("Arial", 22, "bold")
+).pack(pady=20)
+
+
+tk.Label(
+    root,
+    text="Enter a URL to analyze its security risk.",
+    font=("Arial", 11)
+).pack()
+
+
+# URL Entry
+url_entry = tk.Entry(
+    root,
+    width=75,
+    font=("Arial", 11)
+)
+url_entry.pack(pady=15)
+
+
+# ====================================
+# ANALYZE BUTTON FUNCTION
+# ====================================
+
+def run_analysis():
+
+    entered_url = url_entry.get().strip()
+
+    if not entered_url:
+        messagebox.showwarning(
+            "Warning",
+            "Please enter a URL."
+        )
+        return
+
+    if not entered_url.startswith(("http://", "https://")):
+        messagebox.showwarning(
+            "Invalid URL",
+            "Please enter a URL starting with http:// or https://"
+        )
+        return
+
+    parsed = urlparse(entered_url)
+
+    if not parsed.netloc:
+        messagebox.showwarning(
+            "Invalid URL",
+            "Please enter a valid URL."
+        )
+        return
+
+    result = analyze_url(entered_url)
+
+    result_box.delete("1.0", tk.END)
+
+    # Header
+    result_box.insert(
+        tk.END,
+        "SECURITY REPORT\n",
+        "header"
+    )
+
+    result_box.insert(
+        tk.END,
+        "================================\n\n"
+    )
+
+    # Basic Information
+    result_box.insert(
+        tk.END,
+        "URL INFORMATION\n",
+        "section"
+    )
+
+    result_box.insert(
+        tk.END,
+        f"URL       : {entered_url}\n"
+    )
+
+    result_box.insert(
+        tk.END,
+        f"Domain    : {result['domain']}\n"
+    )
+
+    result_box.insert(
+        tk.END,
+        f"Protocol  : {result['scheme']}\n"
+    )
+
+    result_box.insert(
+        tk.END,
+        f"Path      : {result['path']}\n"
+    )
+
+    result_box.insert(
+        tk.END,
+        f"URL Length: {result['url_length']} characters\n\n"
+    )
+
+    # Security Checks
+    result_box.insert(
+        tk.END,
+        "SECURITY CHECKS\n",
+        "section"
+    )
+
+    # IP
+    if result["is_ip"]:
+        result_box.insert(
+            tk.END,
+            "⚠️ IP Address Detection: YES\n",
+            "warning"
+        )
+    else:
+        result_box.insert(
+            tk.END,
+            "✓ IP Address Detection: NO\n",
+            "safe"
+        )
+
+    # HTTPS
+    if result["is_https"]:
+        result_box.insert(
+            tk.END,
+            "✓ HTTPS Enabled: YES\n",
+            "safe"
+        )
+    else:
+        result_box.insert(
+            tk.END,
+            "⚠️ HTTPS Enabled: NO\n",
+            "warning"
+        )
+
+    # Keywords
+    if result["keywords"]:
+        result_box.insert(
+            tk.END,
+            "⚠️ Suspicious Keywords: "
+            + ", ".join(result["keywords"])
+            + "\n",
+            "warning"
+        )
+    else:
+        result_box.insert(
+            tk.END,
+            "✓ Suspicious Keywords: NONE\n",
+            "safe"
+        )
+
+    # @ Symbol
+    if result["has_at"]:
+        result_box.insert(
+            tk.END,
+            "⚠️ '@' Symbol Detected: YES\n",
+            "warning"
+        )
+    else:
+        result_box.insert(
+            tk.END,
+            "✓ '@' Symbol Detected: NO\n",
+            "safe"
+        )
+
+    # Domain Structure
+    if result["complex_domain"]:
+        result_box.insert(
+            tk.END,
+            "⚠️ Complex Domain Structure: YES\n\n",
+            "warning"
+        )
+    else:
+        result_box.insert(
+            tk.END,
+            "✓ Complex Domain Structure: NO\n\n",
+            "safe"
+        )
+
+    # Risk Result
+    result_box.insert(
+        tk.END,
+        "RISK ASSESSMENT\n",
+        "section"
+    )
+
+    result_box.insert(
+        tk.END,
+        f"Risk Score: {result['risk_score']}\n"
+    )
+
+    if result["risk_level"] == "LOW":
+        result_box.insert(
+            tk.END,
+            "Risk Level: LOW\n",
+            "low"
+        )
+
+    elif result["risk_level"] == "MEDIUM":
+        result_box.insert(
+            tk.END,
+            "Risk Level: MEDIUM\n",
+            "medium"
+        )
+
+    else:
+        result_box.insert(
+            tk.END,
+            "Risk Level: HIGH\n",
+            "high"
+        )
+
+    # Reasons
+    result_box.insert(
+        tk.END,
+        "\nReasons:\n",
+        "section"
+    )
+
+    if result["reasons"]:
+        for reason in result["reasons"]:
+            result_box.insert(
+                tk.END,
+                "• " + reason + "\n"
+            )
+    else:
+        result_box.insert(
+            tk.END,
+            "No major warning indicators detected.\n",
+            "safe"
+        )
+
+    result_box.insert(
+        tk.END,
+        "\nNote: This tool uses heuristic URL analysis.\n"
+        "It does not guarantee that a website is safe or malicious.",
+        "note"
+    )
+
+
+# ====================================
+# CLEAR FUNCTION
+# ====================================
+
+def clear_result():
+    url_entry.delete(0, tk.END)
+    result_box.delete("1.0", tk.END)
+
+
+# ====================================
+# BUTTONS
+# ====================================
+
+tk.Button(
+    root,
+    text="ANALYZE URL",
+    font=("Arial", 11, "bold"),
+    width=22,
+    command=run_analysis
+).pack(pady=10)
+
+
+tk.Button(
+    root,
+    text="CLEAR",
+    width=22,
+    command=clear_result
+).pack(pady=5)
+
+
+# ====================================
+# RESULT BOX
+# ====================================
+
+result_box = tk.Text(
+    root,
+    width=78,
+    height=22,
+    font=("Arial", 10)
+)
+
+result_box.pack(pady=15)
+
+
+# ====================================
+# TEXT COLORS
+# ====================================
+
+result_box.tag_configure(
+    "header",
+    font=("Arial", 13, "bold")
+)
+
+result_box.tag_configure(
+    "section",
+    font=("Arial", 10, "bold")
+)
+
+result_box.tag_configure(
+    "safe",
+    foreground="green"
+)
+
+result_box.tag_configure(
+    "warning",
+    foreground="red"
+)
+
+result_box.tag_configure(
+    "low",
+    foreground="green",
+    font=("Arial", 11, "bold")
+)
+
+result_box.tag_configure(
+    "medium",
+    foreground="orange",
+    font=("Arial", 11, "bold")
+)
+
+result_box.tag_configure(
+    "high",
+    foreground="red",
+    font=("Arial", 11, "bold")
+)
+
+result_box.tag_configure(
+    "note",
+    font=("Arial", 9, "italic")
+)
+
+
+root.mainloop()
